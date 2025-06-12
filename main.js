@@ -432,7 +432,7 @@ const whiteMaterial = new THREE.MeshStandardMaterial({
 
 loader.load(
 
-  'Assets/models/fox23.glb',
+  'assets/models/fox23.glb',
 
   (gltf) => {
 
