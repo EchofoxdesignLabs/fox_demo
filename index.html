@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Three.js Demo</title>
+  <style>
+    /* Make body & html fill the screen, remove default margin */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    /* The canvas will fill the entire viewport */
+    #three-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js + Spline Hover Effects</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #eaeaea; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: #333;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Hover over the target mesh to see effects. You might need to adjust TARGET_MESH_NAME.</div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/",
+                "@splinetool/loader": "https://unpkg.com/@splinetool/loader@1.0.25/build/spline-loader.module.js"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import SplineLoader from '@splinetool/loader';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js';
+
+        // --- Configuration ---
+        // !!! IMPORTANT: Change this to the name of your mesh from Blender/Spline !!!
+        const TARGET_MESH_NAME = "fox14"; // e.g., "Cube", "MyAnimatedObject"
+        const SPLINE_SCENE_URL = 'https://prod.spline.design/vc52Sx1SzMkGDmA2/scene.splinecode';
+
+        let camera, scene, renderer, controls, composer, rgbShiftPass;
+        let mixer, animationActions = [];
+        let targetMesh = null;
+        let targetModel = null;
+        let isHovering = false;
+        const mouse = new THREE.Vector2();
+        const raycaster = new THREE.Raycaster();
+        const clock = new THREE.Clock();
+
+        init();
+        animate();
+
+        function init() {
+            // --- Camera (from your setup) ---
+            camera = new THREE.PerspectiveCamera(13.9, window.innerWidth / window.innerHeight, 0.01, 100000);
+            camera.position.set(169.96, 61.4, 107.57);
+            camera.quaternion.setFromEuler(new THREE.Euler(-0.28, 1.11, 0.26));
+
+            // --- Scene ---
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#eaeaea');
+            scene.fog = new THREE.Fog('#ffffff', 100, 1500); // Adjusted fog for better visibility
+
+            // --- Renderer ---
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+            document.body.appendChild(renderer.domElement);
+
+            // --- Lights ---
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(50, 100, 75);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            directionalLight.shadow.camera.left = -100;
+                            directionalLight.shadow.camera.right = 100;
+                            directionalLight.shadow.camera.top = 100;
+                            directionalLight.shadow.camera.bottom = -100;
+            scene.add(directionalLight);
+            // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera); // Optional: visualize shadow camera
+            // scene.add(shadowHelper);
+
+
+            // --- Spline Scene Loader ---
+            const loader = new SplineLoader();
+            loader.load(
+                SPLINE_SCENE_URL,
+                (splineScene) => {
+                    targetModel = splineScene;
+                    scene.add(splineScene);
+                    console.log("Spline scene loaded:", splineScene);
+
+                    // Find the target mesh and other meshes for raycasting
+                    splineScene.traverse((child) => {
+                        if (child.isGroup) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            console.log("Found mesh:", child.name, child);
+                            if (child.name === TARGET_MESH_NAME) {
+                                targetMesh = child;
+                                console.log("Target mesh FOUND:", targetMesh);
+                                document.getElementById('info').textContent = `Hover over '${TARGET_MESH_NAME}' to see effects.`;
+                            }
+                        }
+                    });
+
+                    if (!targetMesh) {
+                        console.warn(`Target mesh named "${TARGET_MESH_NAME}" not found. Hover effects on a specific mesh will not work. Trying to use first found mesh as target if any.`);
+                        // Fallback: try to use the first mesh found if no specific name matches
+                        splineScene.traverse((child) => {
+                            if (child.isMesh && !targetMesh) {
+                                targetMesh = child;
+                                console.log("Using first found mesh as target fallback:", targetMesh.name);
+                                document.getElementById('info').textContent = `Target '${TARGET_MESH_NAME}' not found. Hover '${targetMesh.name}' instead.`;
+                            }
+                        });
+                         if (!targetMesh) {
+                            document.getElementById('info').textContent = `Target mesh "${TARGET_MESH_NAME}" not found. No specific mesh hover target.`;
+                         }
+                    }
+
+
+                    // --- Animation Setup ---
+                    // Spline scenes might have animations attached to the main group or specific objects
+                    // We'll create a mixer for the whole loaded scene
+                    mixer = new THREE.AnimationMixer(targetMesh);
+                    // data.animations is an array of [uuid, name, jsonString]
+                            targetMesh.data.animations.forEach((animEntry) => {
+                                // animEntry is like [id, name, '{"name":"fox13","duration":3.25,...}']
+                                const jsonString = animEntry[2];
+                                try {
+                                    const parsed = JSON.parse(jsonString);
+                                    const clip = THREE.AnimationClip.parse(parsed);
+                                    const action = mixer.clipAction(clip);
+                                    action.play();
+                                    action.timeScale = 0.5; // start slow
+                                    animationActions.push(action);
+                                } catch (err) {
+                                    console.error('Error parsing animation clip:', err);
+                                }
+                            });
+                             console.log(`Initialized ${animationActions.length} animation(s) on target mesh.`);
+                    // if (targetMesh.data.animations && targetMesh.data.animations > 0) {
+                        
+                    // } 
+                    console.log(`Found and playing ${animationActions.length} animation(s).`);
+
+                    if (animationActions.length > 0) {
+                        console.log(`Found and playing ${animationActions.length} animation(s).`);
+                        setAnimationSpeed(0.5); // Start with slow animation
+                    } else {
+                        console.log("No animations found in the Spline scene through standard properties.");
+                        // Spline's runtime might handle animations differently.
+                        // If you rely on Spline's built-in animation playback,
+                        // you might need to find Spline-specific API calls to control timeScale.
+                        // For example: splineScene.setTimeScale(0.5) if such a method exists.
+                    }
+                },
+                (progress) => {
+                    console.log('Spline loading progress:', (progress.loaded / progress.total * 100) + '% loaded');
+                },
+                (error) => {
+                    console.error('Error loading Spline scene:', error);
+                    document.getElementById('info').textContent = 'Error loading Spline scene. Check console.';
+                }
+            );
+
+            // --- Post-processing for Chromatic Aberration ---
+            composer = new EffectComposer(renderer);
+            const renderPass = new RenderPass(scene, camera);
+            composer.addPass(renderPass);
+
+            rgbShiftPass = new ShaderPass(RGBShiftShader);
+            rgbShiftPass.uniforms['amount'].value = 0.0; // Initial: no aberration
+            rgbShiftPass.enabled = false; // Initially disabled
+            composer.addPass(rgbShiftPass);
+
+            // --- Orbit Controls (from your setup) ---
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.125;
+
+            // --- Event Listeners ---
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousemove', onMouseMove);
+        }
+
+        function setAnimationSpeed(speed) {
+            if (animationActions.length > 0) {
+                animationActions.forEach(action => {
+                    action.timeScale = speed;
+                });
+            } else if (mixer) { // Fallback if actions array is empty but mixer exists
+                 mixer.timeScale = speed;
+            }
+            // If Spline runtime has its own global time scale, you might call it here:
+            // if (scene.getObjectByName("Spline Root") && scene.getObjectByName("Spline Root").setTimeScale) {
+            //     scene.getObjectByName("Spline Root").setTimeScale(speed);
+            // }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            if (targetModel) {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(targetModel, true);
+
+                if (intersects.length > 0) {
+                    if (!isHovering) {
+                        isHovering = true;
+                        updateEffects();
+                    }
+                } else {
+                    if (isHovering) {
+                        isHovering = false;
+                        updateEffects();
+                    }
+                }
+            } else {
+                if (isHovering) {
+                    isHovering = false;
+                    updateEffects();
+                }
+            }
+        }
+
+
+        function updateEffects() {
+            if (isHovering) {
+                rgbShiftPass.enabled = true;
+                rgbShiftPass.uniforms['amount'].value = 0.005; // Chromatic aberration intensity
+                setAnimationSpeed(1.0); // Normal animation speed
+            } else {
+                rgbShiftPass.enabled = false;
+                rgbShiftPass.uniforms['amount'].value = 0.0;
+                setAnimationSpeed(0.5); // Slow animation speed
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const deltaTime = clock.getDelta();
+
+            controls.update();
+
+            if (mixer) {
+                mixer.update(deltaTime);
+            }
+
+            // updateEffects(); // Call this here if you prefer continuous updates,
+                               // or only on mouse move/state change like it is now.
+
+            composer.render(); // Use composer to render with effects
+            // renderer.render(scene, camera); // Don't use this if using composer
+        }
+
+    </script>
+</body>
+</html> -->
+
+
