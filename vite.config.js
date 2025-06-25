@@ -2,5 +2,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/fox_demo',
+  base: process.env.NODE_ENV === 'production'
+    ? '/Echofox-TextEffect/'
+    : '/',
 });

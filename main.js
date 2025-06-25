@@ -67,7 +67,7 @@ import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass.js';
 
 const scene = new THREE.Scene();
 
-scene.background = new THREE.Color(0xfafafa); // White background
+//scene.background = new THREE.Color(0xfafafa); // White background
 
 
 
@@ -113,13 +113,13 @@ camera.rotation.set(
 
 
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha:true });
 
 renderer.setPixelRatio(window.devicePixelRatio);
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-renderer.setClearColor(0xffffff, 1);
+renderer.setClearColor(0x000000, 0);
 
 renderer.useLegacyLights = false;
 
