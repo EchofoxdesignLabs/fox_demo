@@ -68,7 +68,7 @@ import { WebGLRenderTarget, RGBAFormat } from 'three';
 
 const scene = new THREE.Scene();
 
-scene.background = null;// White background
+scene.background =new THREE.Color('#fafafa'); ;// White background
 
 
 
@@ -114,7 +114,7 @@ camera.rotation.set(
 
 
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha:true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha:false });
 
 renderer.setPixelRatio(window.devicePixelRatio);
 
@@ -199,7 +199,7 @@ const CustomAnaglyphShader = {
             vec2 shift = vec2(0.005 * intensity, 0.0);
             vec4 colorL = texture(tDiffuse, vUv - shift); // Sample for the left eye (red channel)
             vec4 colorR = texture(tDiffuse, vUv + shift); // Sample for the right eye (green/blue channels)
-            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,0.1);
+            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,1);
         }
     `
 };
@@ -641,7 +641,7 @@ window.addEventListener('pointermove', (event) => {
         mixer.timeScale = isHovered ? 1.0 : 0.5;
 
       }
-
+      console.log(isHovered,"isHovered")
       useEffect = isHovered;
 
     }

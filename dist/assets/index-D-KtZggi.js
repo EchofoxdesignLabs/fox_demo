@@ -4010,7 +4010,7 @@ void main() {
             vec2 shift = vec2(0.005 * intensity, 0.0);
             vec4 colorL = texture(tDiffuse, vUv - shift); // Sample for the left eye (red channel)
             vec4 colorR = texture(tDiffuse, vUv + shift); // Sample for the right eye (green/blue channels)
-            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,0.3);
+            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,0.1);
         }
     `},fh=new La({uniforms:{tDiffuse:{value:null},opacity:{value:.5}},vertexShader:`
     varying vec2 vUv;
