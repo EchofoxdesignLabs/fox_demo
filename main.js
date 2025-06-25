@@ -90,7 +90,7 @@ const camera = new THREE.PerspectiveCamera(
 
 // Set camera position from Spline
 
-camera.position.set(200, 61.4, 107.57);
+camera.position.set(180, 51, 90);
 
 
 
@@ -480,7 +480,7 @@ loader.load(
 
     model.position.set(50, 17, 0);
 
-    model.scale.set(6.7, 6.7,6.7);
+    model.scale.set(7, 7,7);
 
 
 
