@@ -67,7 +67,7 @@ import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass.js';
 
 const scene = new THREE.Scene();
 
-//scene.background = new THREE.Color(0xfafafa); // White background
+scene.background = new THREE.Color( 0xff0000 );// White background
 
 
 
@@ -119,7 +119,7 @@ renderer.setPixelRatio(window.devicePixelRatio);
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-renderer.setClearColor(0x000000, 0);
+
 
 renderer.useLegacyLights = false;
 
@@ -128,6 +128,9 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = false;
 
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x000000, 0);
+renderer.autoClear = false;
+console.log(renderer);
 
 document.body.appendChild(renderer.domElement);
 
@@ -141,7 +144,11 @@ document.body.appendChild(renderer.domElement);
 // 2) Post-processing Setup with EffectComposer
 let composer, anaglyphPass, bokehPass;
 composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera);
+renderPass.clearColor = new THREE.Color(0,0,0);
+renderPass.clearAlpha = 0;
+renderPass.clear = true;
+composer.addPass(renderPass);
 
 // Add SAOPass for Ambient Occlusion - THIS CREATES THE SOFT CONTACT SHADOWS
 // const ssao = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
@@ -233,6 +240,7 @@ let useEffect = false;
 
 anaglyphPass = new ShaderPass(CustomAnaglyphShader);
 composer.addPass(anaglyphPass);
+renderer.setClearColor(0x000000, 0);
 
 
 
