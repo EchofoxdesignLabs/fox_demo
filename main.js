@@ -17,6 +17,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
 import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass.js';
+import { WebGLRenderTarget, RGBAFormat } from 'three';
 
 
 
@@ -67,7 +68,7 @@ import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass.js';
 
 const scene = new THREE.Scene();
 
-scene.background = new THREE.Color( 0xff0000 );// White background
+scene.background = null;// White background
 
 
 
@@ -143,7 +144,12 @@ document.body.appendChild(renderer.domElement);
 // composer.addPass(new RenderPass(scene, camera));
 // 2) Post-processing Setup with EffectComposer
 let composer, anaglyphPass, bokehPass;
-composer = new EffectComposer(renderer);
+const rt = new WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+  format: RGBAFormat,   // <-- preserve alpha
+  depthBuffer: true,
+  stencilBuffer: false
+});
+composer = new EffectComposer(renderer,rt);
 const renderPass = new RenderPass(scene, camera);
 renderPass.clearColor = new THREE.Color(0,0,0);
 renderPass.clearAlpha = 0;
@@ -193,7 +199,7 @@ const CustomAnaglyphShader = {
             vec2 shift = vec2(0.005 * intensity, 0.0);
             vec4 colorL = texture(tDiffuse, vUv - shift); // Sample for the left eye (red channel)
             vec4 colorR = texture(tDiffuse, vUv + shift); // Sample for the right eye (green/blue channels)
-            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b, 1.0);
+            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,0);
         }
     `
 };
@@ -241,6 +247,13 @@ let useEffect = false;
 anaglyphPass = new ShaderPass(CustomAnaglyphShader);
 composer.addPass(anaglyphPass);
 renderer.setClearColor(0x000000, 0);
+const last = composer.passes[ composer.passes.length - 1 ];
+
+if ( last.material ) {
+  console.log(composer,"last");
+  last.material.transparent = true;
+  last.material.blending   = THREE.NoBlending;
+}
 
 
 
@@ -741,6 +754,7 @@ function animate() {
 
   // }
   composer.render();
+  //renderer.render(scene, camera);
 
 }
 
