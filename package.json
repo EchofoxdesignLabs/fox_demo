@@ -1,6 +1,6 @@
 {
   "name": "fox-demo-project",
-  "homepage": "https://abhijith-echofox.github.io/fox_demo/",
+  "homepage": "https://EchofoxdesignLabs.github.io/fox_demo/",
   "version": "1.0.0",
   "type":"module",
   "dependencies": {
@@ -15,6 +15,6 @@
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist -r https://github.com/Abhijith-EchoFox/fox_demo.git -f"
+    "deploy": "gh-pages -d dist -r https://github.com/EchofoxdesignLabs/fox_demo.git -f"
   }
 }
