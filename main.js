@@ -72,6 +72,7 @@ scene.background =new THREE.Color('#fafafa'); ;// White background
 
 
 
+
 // Updated camera settings from your Spline screenshot
 
 const camera = new THREE.PerspectiveCamera(
@@ -143,7 +144,7 @@ document.body.appendChild(renderer.domElement);
 
 // composer.addPass(new RenderPass(scene, camera));
 // 2) Post-processing Setup with EffectComposer
-let composer, anaglyphPass, bokehPass;
+let composer, anaglyphPass, bokehPass,bandPass,aberrationPass;
 const rt = new WebGLRenderTarget(window.innerWidth, window.innerHeight, {
   format: RGBAFormat,   // <-- preserve alpha
   depthBuffer: true,
@@ -177,6 +178,89 @@ composer.addPass(bokehPass);
 const film = new FilmPass(0.02, 0, 0, false);
 composer.addPass(film);
 
+// ✨ New "Separation" Shader for a clean Left-Right split ✨
+// ✨ Final 4-Color "2 Left, 2 Right" Separation Shader ✨
+const FourColorSeparationShader = {
+  uniforms: {
+    'tDiffuse': { value: null },
+    'intensity': { value: 0.0 },
+    'fringeStrength': { value: 3.0 },
+    'fringeBrightness': { value: 1.0 },
+    'uColorL1': { value: new THREE.Color() }, // Left Color 1
+    'uColorL2': { value: new THREE.Color() }, // Left Color 2
+    'uColorR1': { value: new THREE.Color() }, // Right Color 1
+    'uColorR2': { value: new THREE.Color() }, // Right Color 2
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float intensity;
+    uniform float fringeStrength;
+    uniform float fringeBrightness;
+    uniform vec3 uColorL1;
+    uniform vec3 uColorL2;
+    uniform vec3 uColorR1;
+    uniform vec3 uColorR2;
+    varying vec2 vUv;
+
+    const float epsilon = 0.001;
+    const vec3 luma = vec3(0.299, 0.587, 0.114);
+
+    void main() {
+      vec4 originalFragColor = texture(tDiffuse, vUv);
+
+      if (intensity < epsilon) {
+        gl_FragColor = originalFragColor;
+        return;
+      }
+      
+      vec3 originalColor = originalFragColor.rgb;
+      float centerLuma = dot(originalColor, luma);
+
+      // Define 2 left directions and 2 right directions
+      float offset = intensity * 0.003;
+      vec2 dirL1 = vec2(-1.0, -0.5) * offset;
+      vec2 dirL2 = vec2(-0.5, 1.0) * offset;
+      vec2 dirR1 = vec2(1.0, 0.5) * offset;
+      vec2 dirR2 = vec2(0.5, -1.0) * offset;
+      
+      // Get luma for all 4 directions
+      float lumaL1 = dot(texture(tDiffuse, vUv + dirL1).rgb, luma);
+      float lumaL2 = dot(texture(tDiffuse, vUv + dirL2).rgb, luma);
+      float lumaR1 = dot(texture(tDiffuse, vUv + dirR1).rgb, luma);
+      float lumaR2 = dot(texture(tDiffuse, vUv + dirR2).rgb, luma);
+      
+      // Sharpen the edges
+      float edgeL1 = pow(abs(centerLuma - lumaL1), 2.0);
+      float edgeL2 = pow(abs(centerLuma - lumaL2), 2.0);
+      float edgeR1 = pow(abs(centerLuma - lumaR1), 2.0);
+      float edgeR2 = pow(abs(centerLuma - lumaR2), 2.0);
+
+      // Calculate fringe contributions
+      vec3 fringeL1 = uColorL1 * edgeL1 * fringeStrength;
+      vec3 fringeL2 = uColorL2 * edgeL2 * fringeStrength;
+      vec3 fringeR1 = uColorR1 * edgeR1 * fringeStrength;
+      vec3 fringeR2 = uColorR2 * edgeR2 * fringeStrength;
+
+      // Combine the two left fringes and two right fringes
+      vec3 leftFringe = max(fringeL1, fringeL2);
+      vec3 rightFringe = max(fringeR1, fringeR2);
+      
+      // Add the final fringes to the original color
+      vec3 finalColor = originalColor + (leftFringe + rightFringe) * fringeBrightness;
+
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+};
+
+
 // Add custom Anaglyph Pass - CORRECTED IMPLEMENTATION
 // This shader is now self-contained and does not rely on the removed AnaglyphShader.js
 const CustomAnaglyphShader = {
@@ -196,10 +280,25 @@ const CustomAnaglyphShader = {
         uniform float intensity;
         varying vec2 vUv;
         void main() {
-            vec2 shift = vec2(0.005 * intensity, 0.0);
-            vec4 colorL = texture(tDiffuse, vUv - shift); // Sample for the left eye (red channel)
-            vec4 colorR = texture(tDiffuse, vUv + shift); // Sample for the right eye (green/blue channels)
-            gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,1);
+            // vec2 shift = vec2(0.005 * intensity, 0.0);
+            // vec4 colorL = texture(tDiffuse, vUv - shift); // Sample for the left eye (red channel)
+            // vec4 colorR = texture(tDiffuse, vUv + shift); // Sample for the right eye (green/blue channels)
+            // vec4 colorG = texture(tDiffuse, vUv + shift+5); // Sample for the right eye (green/blue channels)
+            // gl_FragColor = vec4(colorL.r, colorR.g, colorR.b,1);
+            float shift = 0.003 * intensity;
+
+            // Define three different directions for the R, G, and B channels
+            vec2 dirR = vec2(1.0, 0.0) * shift;
+            vec2 dirG = vec2(-0.5, 0.866) * shift;  // Spread 120 degrees apart
+            vec2 dirB = vec2(-0.5, -0.866) * shift; // Spread 120 degrees apart
+
+            // Sample the texture at the three shifted positions
+            vec4 sampleR = texture(tDiffuse, vUv + dirR);
+            vec4 sampleG = texture(tDiffuse, vUv + dirG);
+            vec4 sampleB = texture(tDiffuse, vUv + dirB);
+
+            // Reconstruct the final color from the R, G, and B channels of the different samples
+            gl_FragColor = vec4(sampleR.r, sampleG.g, sampleB.b, 1.0);
         }
     `
 };
@@ -232,7 +331,7 @@ const WhiteOverlayPass = new ShaderPass({
   `
 });
 // 2) Add it at the very end of your composer
-composer.addPass(WhiteOverlayPass);
+//composer.addPass(WhiteOverlayPass);
 
 
 
@@ -242,7 +341,90 @@ composer.addPass(WhiteOverlayPass);
 
 // effect.setSize(window.innerWidth, window.innerHeight);
 
+const CustomAberrationShader = {
+  uniforms: {
+    'tDiffuse': { value: null },
+    'intensity': { value: 0.0 },
+    'uColor1': { value: new THREE.Color() },
+    'uColor2': { value: new THREE.Color() },
+    'uColor3': { value: new THREE.Color() },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float intensity;
+    uniform vec3 uColor1;
+    uniform vec3 uColor2;
+    uniform vec3 uColor3;
+    varying vec2 vUv;
+
+    const float epsilon = 0.001;
+    const vec3 luma = vec3(0.299, 0.587, 0.114);
+
+    void main() {
+      if (intensity < epsilon) {
+        gl_FragColor = texture(tDiffuse, vUv);
+        return;
+      }
+
+      // Define directions for the 3 color channels, spread out evenly
+      float offset = intensity * 0.004;
+      vec2 dir1 = vec2(1.0, 0.0) * offset;
+      vec2 dir2 = vec2(-0.5, 0.866) * offset;  // 120 degrees
+      vec2 dir3 = vec2(-0.5, -0.866) * offset; // 240 degrees
+
+      // Get the R, G, B values from the shifted samples
+      float r = texture(tDiffuse, vUv + dir1).r;
+      float g = texture(tDiffuse, vUv + dir2).g;
+      float b = texture(tDiffuse, vUv + dir3).b;
+
+      // 1. Combine the custom colors, weighted by the R,G,B samples
+      vec3 fringe = r * uColor1 + g * uColor2 + b * uColor3;
+
+      // 2. Get the brightness of the original, un-shifted pixel
+      float originalLuma = dot(texture(tDiffuse, vUv).rgb, luma);
+
+      // 3. Get the brightness of our new fringe color
+      float fringeLuma = dot(fringe, luma);
+
+      // 4. Adjust the fringe color to match the original brightness
+      vec3 finalColor = fringe * (originalLuma / (fringeLuma + epsilon));
+      
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+};
+// Create the pass with our new custom shader
+// aberrationPass = new ShaderPass(CustomAberrationShader);
+// composer.addPass(aberrationPass);
+
+// // 🎨 --- Customize Your 3 Colors Here --- 🎨
+// aberrationPass.uniforms.uColor1.value.set('#D90429'); // Replaces Red
+// aberrationPass.uniforms.uColor2.value.set('#00D563'); // Replaces Green
+// aberrationPass.uniforms.uColor3.value.set('#66FBFB'); // Replaces Blue
+
 let useEffect = false;
+
+// Create the pass with our new custom shader
+// bandPass = new ShaderPass(FourColorSeparationShader);
+// composer.addPass(bandPass);
+
+// // 🎨 --- Customize Colors and Strength Here --- 🎨
+// // Assigning 2 colors for the left side and 2 for the right
+// bandPass.uniforms.uColorL1.value.set('#0046FF'); // Red on the Left D90429
+// bandPass.uniforms.uColorL2.value.set('#FFC300'); // Green on the Left 00D563
+// bandPass.uniforms.uColorR1.value.set('#D90429'); // Yellow on the Right FFC300
+// bandPass.uniforms.uColorR2.value.set('#16C47F'); // Cyan on the Right 66FBFB
+
+// bandPass.uniforms.fringeStrength.value = 5.0; 
+// bandPass.uniforms.fringeBrightness.value = 1.2;
+
 
 anaglyphPass = new ShaderPass(CustomAnaglyphShader);
 composer.addPass(anaglyphPass);
@@ -638,7 +820,7 @@ window.addEventListener('pointermove', (event) => {
 
       if (mixer) {
 
-        mixer.timeScale = isHovered ? 1.0 : 0.5;
+        mixer.timeScale = isHovered ? 1.5 : 0.5;
 
       }
       console.log(isHovered,"isHovered")
@@ -739,7 +921,9 @@ function animate() {
 
   controls.update();
    // Smoothly update the anaglyph effect's intensity
-    const targetIntensity = isHovered ? 1.5 : 0.0;
+    const targetIntensity = isHovered ? 2.5 : 0.0;
+    // const currentIntensity = aberrationPass.uniforms.intensity.value;
+    // aberrationPass.uniforms.intensity.value += (targetIntensity - currentIntensity) * 0.1; // 0.1 is the smoothing factor
     const currentIntensity = anaglyphPass.uniforms.intensity.value;
     anaglyphPass.uniforms.intensity.value += (targetIntensity - currentIntensity) * 0.1; // 0.1 is the smoothing factor
     WhiteOverlayPass.uniforms.opacity.value = 0.2;  // 50% white
@@ -753,7 +937,7 @@ function animate() {
   //   renderer.render(scene, camera);
 
   // }
-  composer.render();
+  composer.render(delta);
   //renderer.render(scene, camera);
 
 }
